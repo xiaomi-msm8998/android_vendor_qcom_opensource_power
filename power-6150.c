@@ -37,11 +37,11 @@
 #include "power-common.h"
 #include "utils.h"
 
-const int kMinInteractiveDuration = 100;  /* ms */
+const int kMinInteractiveDuration = 250;  /* ms */
 const int kMaxInteractiveDuration = 5000; /* ms */
 const int kMaxLaunchDuration = 5000;      /* ms */
 
-static int process_interaction_hint(void* data) {
+static bool processInterActionBoost(int32_t durationMs) {
     static struct timespec s_previous_boost_timespec;
     static int s_previous_duration = 0;
     static int interaction_handle = -1;
@@ -50,12 +50,10 @@ static int process_interaction_hint(void* data) {
     long long elapsed_time;
     int duration = kMinInteractiveDuration;
 
-    if (data) {
-        int input_duration = *((int*)data);
-        if (input_duration > duration) {
-            duration = (input_duration > kMaxInteractiveDuration) ? kMaxInteractiveDuration
-                                                                  : input_duration;
-        }
+    int input_duration = durationMs;
+    if (input_duration > duration) {
+        duration = (input_duration > kMaxInteractiveDuration) ? kMaxInteractiveDuration
+                                                              : input_duration;
     }
 
     clock_gettime(CLOCK_MONOTONIC, &cur_boost_timespec);
@@ -65,7 +63,7 @@ static int process_interaction_hint(void* data) {
     // also detect if we're doing anything resembling a fling
     // support additional boosting in case of flings
     if (elapsed_time < 250000 && duration <= 750) {
-        return HINT_HANDLED;
+        return true;
     }
     s_previous_boost_timespec = cur_boost_timespec;
     s_previous_duration = duration;
@@ -74,51 +72,33 @@ static int process_interaction_hint(void* data) {
                                                     duration, SCROLL_VERTICAL);
     if (!CHECK_HANDLE(interaction_handle)) {
         ALOGE("Failed to perform interaction boost");
-        return HINT_NONE;
+        return false;
     }
-    return HINT_HANDLED;
+    return true;
 }
 
-static int process_activity_launch_hint(void* data) {
-    static int launch_handle = -1;
-    static int launch_mode = 0;
-
-    // release lock early if launch has finished
-    if (!data) {
-        if (CHECK_HANDLE(launch_handle)) {
-            release_request(launch_handle);
-            launch_handle = -1;
-        }
-        launch_mode = 0;
-        return HINT_HANDLED;
-    }
-
-    if (!launch_mode) {
-        launch_handle = perf_hint_enable_with_type(VENDOR_HINT_FIRST_LAUNCH_BOOST,
-                                                   kMaxLaunchDuration, LAUNCH_BOOST_V1);
-        if (!CHECK_HANDLE(launch_handle)) {
-            ALOGE("Failed to perform launch boost");
-            return HINT_NONE;
-        }
-        launch_mode = 1;
-    }
-    return HINT_HANDLED;
-}
-
-int power_hint_override(power_hint_t hint, void* data) {
-    int ret_val = HINT_NONE;
-
-    switch (hint) {
-        case POWER_HINT_INTERACTION:
-            ret_val = process_interaction_hint(data);
-            break;
-        case POWER_HINT_LAUNCH:
-            ret_val = process_activity_launch_hint(data);
+bool setBoostOverride(Boost type, int32_t durationMs) {
+    int ret = false;
+    switch (type) {
+        case Boost::INTERACTION:
+            ret = processInterActionBoost(durationMs);
             break;
         default:
             break;
     }
-    return ret_val;
+    return ret;
+}
+
+bool isBoostSupportedOverride(Boost type) {
+    int ret = false;
+    switch (type) {
+        case Boost::INTERACTION:
+            ret = true;
+            break;
+        default:
+            break;
+    }
+    return ret;
 }
 
 int set_interactive_override(int on) {

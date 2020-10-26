@@ -131,13 +131,32 @@ ndk::ScopedAStatus Power::isModeSupported(Mode type, bool* _aidl_return) {
     return ndk::ScopedAStatus::ok();
 }
 
+bool __attribute__((weak))
+setBoostOverride(Boost type, int32_t durationMs) {
+    return false;
+}
+
 ndk::ScopedAStatus Power::setBoost(Boost type, int32_t durationMs) {
     LOG(INFO) << "Power setBoost: " << static_cast<int32_t>(type) << ", duration: " << durationMs;
+    if (setBoostOverride(type, durationMs)) {
+        /* The boost has been handled. We can skip the rest. */
+		return ndk::ScopedAStatus::ok();
+    }
     return ndk::ScopedAStatus::ok();
+}
+
+bool __attribute__((weak))
+isBoostSupportedOverride(Boost type) {
+    return false;
 }
 
 ndk::ScopedAStatus Power::isBoostSupported(Boost type, bool* _aidl_return) {
     LOG(INFO) << "Power isBoostSupported: " << static_cast<int32_t>(type);
+    if (isBoostSupportedOverride(type)) {
+        /* The boost is supported. We can skip the rest. */
+        *_aidl_return = true;
+        return ndk::ScopedAStatus::ok();
+    }
     *_aidl_return = false;
     return ndk::ScopedAStatus::ok();
 }
