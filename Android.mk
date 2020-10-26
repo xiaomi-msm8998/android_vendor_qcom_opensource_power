@@ -117,7 +117,7 @@ LOCAL_SRC_FILES += power-msmnile.c
 endif
 
 ifeq ($(call is-board-platform-in-list,sm6150), true)
-LOCAL_SRC_FILES += power-6150.c
+LOCAL_SRC_FILES += Power-6150.cpp
 endif
 
 endif # End of board specific list

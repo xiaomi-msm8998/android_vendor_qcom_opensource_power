@@ -28,52 +28,26 @@
  */
 
 #define LOG_TAG "QTI PowerHAL"
-#define LOG_NIDEBUG 0
+#define LOG_NIDEBUG 1
 
 #include <log/log.h>
-#include <time.h>
 
+#include "Power.h"
 #include "performance.h"
-#include "power-common.h"
-#include "utils.h"
 
-const int kMinInteractiveDuration = 250;  /* ms */
-const int kMaxInteractiveDuration = 5000; /* ms */
-const int kMaxLaunchDuration = 5000;      /* ms */
+using ::aidl::android::hardware::power::Boost;
 
-static bool processInterActionBoost(int32_t durationMs) {
-    static struct timespec s_previous_boost_timespec;
-    static int s_previous_duration = 0;
-    static int interaction_handle = -1;
+namespace aidl {
+namespace android {
+namespace hardware {
+namespace power {
+namespace impl {
 
-    struct timespec cur_boost_timespec;
-    long long elapsed_time;
-    int duration = kMinInteractiveDuration;
+extern "C" int perf_hint_enable_with_type(int hint_id, int duration, int type);
 
-    int input_duration = durationMs;
-    if (input_duration > duration) {
-        duration = (input_duration > kMaxInteractiveDuration) ? kMaxInteractiveDuration
-                                                              : input_duration;
-    }
-
-    clock_gettime(CLOCK_MONOTONIC, &cur_boost_timespec);
-
-    elapsed_time = calc_timespan_us(s_previous_boost_timespec, cur_boost_timespec);
-    // don't hint if it's been less than 250ms since last boost
-    // also detect if we're doing anything resembling a fling
-    // support additional boosting in case of flings
-    if (elapsed_time < 250000 && duration <= 750) {
-        return true;
-    }
-    s_previous_boost_timespec = cur_boost_timespec;
-    s_previous_duration = duration;
-
-    interaction_handle = perf_hint_enable_with_type(VENDOR_HINT_SCROLL_BOOST,
-                                                    duration, SCROLL_VERTICAL);
-    if (!CHECK_HANDLE(interaction_handle)) {
-        ALOGE("Failed to perform interaction boost");
-        return false;
-    }
+static bool processInteractionBoost(int32_t durationMs) {
+    ALOGI("processing interaction boost with duration: %i", durationMs);
+    perf_hint_enable_with_type(VENDOR_HINT_SCROLL_BOOST, durationMs, SCROLL_VERTICAL);
     return true;
 }
 
@@ -81,7 +55,7 @@ bool setBoostOverride(Boost type, int32_t durationMs) {
     int ret = false;
     switch (type) {
         case Boost::INTERACTION:
-            ret = processInterActionBoost(durationMs);
+            ret = processInteractionBoost(durationMs);
             break;
         default:
             break;
@@ -101,6 +75,8 @@ bool isBoostSupportedOverride(Boost type) {
     return ret;
 }
 
-int set_interactive_override(int on) {
-    return HINT_HANDLED; /* Don't excecute this code path, not in use */
-}
+}  // namespace impl
+}  // namespace power
+}  // namespace hardware
+}  // namespace android
+}  // namespace aidl
