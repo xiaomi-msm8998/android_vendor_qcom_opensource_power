@@ -31,6 +31,7 @@
 #define LOG_NIDEBUG 1
 
 #include <log/log.h>
+#include <time.h>
 
 #include "Power.h"
 #include "performance.h"
@@ -43,11 +44,41 @@ namespace hardware {
 namespace power {
 namespace impl {
 
+const int kMinInteractionDuration = 100;  /* ms */
+const int kMaxInteractionDuration = 3000; /* ms */
+
 extern "C" int perf_hint_enable_with_type(int hint_id, int duration, int type);
+extern "C" long long calc_timespan_us(struct timespec start, struct timespec end);
 
 static bool processInteractionBoost(int32_t durationMs) {
-    ALOGI("processing interaction boost with duration: %i", durationMs);
-    perf_hint_enable_with_type(VENDOR_HINT_SCROLL_BOOST, durationMs, SCROLL_VERTICAL);
+    static struct timespec sPreviousBoostTimespec;
+    static int sPreviousDuration = 0;
+
+    struct timespec curBoostTimespec;
+    long long elapsedTime;
+    int duration = kMinInteractionDuration;
+
+	ALOGI("Processing interaction boost with duration: %i", durationMs);
+
+    int inputDuration = durationMs;
+    if (inputDuration > duration) {
+        duration = (inputDuration > kMaxInteractionDuration) ? kMaxInteractionDuration
+                                                              : inputDuration;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &curBoostTimespec);
+
+    elapsedTime = calc_timespan_us(sPreviousBoostTimespec, curBoostTimespec);
+    // don't boost if it's been less than 250ms since last boost
+    // also detect if we're doing anything resembling a fling
+    // support additional boosting in case of flings
+    if (elapsedTime < 250000 && duration <= 750) {
+        return true;
+    }
+    sPreviousBoostTimespec = curBoostTimespec;
+    sPreviousDuration = duration;
+
+    perf_hint_enable_with_type(VENDOR_HINT_SCROLL_BOOST, duration, SCROLL_VERTICAL);
     return true;
 }
 
